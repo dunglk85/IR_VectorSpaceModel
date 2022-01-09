@@ -53,23 +53,7 @@ class LoadDataset():
                     qid = int(row[3:].replace("\n", ""))
                 if r:
                     row = re.sub(r'[^a-zA-Z\s]+', '', row)
-                    t += row
-
-            # t = []
-            # r = False
-            # for row in f:
-            #     if row.startswith(".W"):
-            #         r = True
-            #         continue
-            #     if row.startswith(".I"):
-            #         if t != []:
-            #             q[qid] = t
-            #         t = []
-            #         r = False
-            #         qid = int(row[3:].replace("\n", ""))
-            #     if r:
-            #         row = re.sub(r'[^a-zA-Z\s]+', '', row)
-            #         t += row.split()
+                    t += row.replace("\n", "")
         return q
 
 
@@ -85,5 +69,5 @@ class LoadDataset():
                 r = row.split(" ")
                 qid = int(r[0])
                 rel[qid] = rel.get(qid, []) + [int(r[2])]
-
         return rel
+

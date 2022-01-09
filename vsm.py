@@ -5,6 +5,9 @@ from math import log, sqrt
 from os import listdir
 from os.path import isfile, join
 
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+
 
 class VectorSpaceModel():
     def __init__(self, docs):
@@ -12,12 +15,24 @@ class VectorSpaceModel():
         The class is initialized with the documents stored as a dictionary, 
         with docIDs as keys and the list of terms as values.
         """
-        self.docs = docs
+        self.docs = []
+        for i, d in enumerate(docs):
+            self.docs.append(self.preprocess_tokens(docs[i]))
         self.n_docs = len(self.docs)
         self.index = self.inverted_index()
         self.vocab = self.get_vocabulary()
         self.n_terms = len(self.vocab)
         self.tfidf = None
+
+
+    def preprocess_tokens(self, tokens):
+        st = PorterStemmer()
+        sw = stopwords.words('english')
+
+        tokens = [word for word in tokens if word not in sw]
+        tokens = [st.stem(word) for word in tokens]
+        tokens = [word for word in tokens if word not in sw]
+        return tokens
 
 
     def get_vocabulary(self):
@@ -84,7 +99,7 @@ class VectorSpaceModel():
         It returns a numpy array, 0 or 1 in q_vec[i], depending on whether the term
         at index i is present or not in the query.
         """
-        q = self.process_text(query)  # to return a list of terms
+        q = self.preprocess_tokens(query.split())  # to return a list of terms
         q_vec = np.zeros(self.n_terms)
 
         for t in self.vocab:
@@ -92,15 +107,6 @@ class VectorSpaceModel():
                 ind = self.vocab.index(t)
                 q_vec[ind] = 1
         return q_vec
-
-
-    def process_text(self, text):
-        """"
-        Function to process a free-form text.
-
-        It returns a list of processed terms.
-        """
-        return text.split(" ")
 
 
     def relevance_scores(self, query):
@@ -115,7 +121,6 @@ class VectorSpaceModel():
             self.tfidf = self.tfidf_vectors()
 
         if not isinstance(query, np.ndarray):
-            print(query)
             query = self.query_as_vector(query)
         
         q_length = sqrt(sum(query**2))
@@ -161,7 +166,8 @@ class VectorSpaceModel():
         if self.tfidf is None:
             self.tfidf = self.tfidf_vectors()
         
-        query = self.query_as_vector(query)
+        if not isinstance(query, np.ndarray):
+            query = self.query_as_vector(query)
         q_opt = np.zeros(self.n_terms)
         
         for t in self.vocab:
@@ -196,3 +202,41 @@ class VectorSpaceModel():
         rel_docs = list(self.vector_space_model(query, k).keys())
         q_opt = self.relevance_feedback_rocchio(query, rel_docs, gamma=0)
         return q_opt
+
+
+    def precision_recall(self, queries, relevance, min_k, max_k, rel_feedback=False, pseudo_feedback=False):
+        """
+        Function to compute precision and recall for each k in [min_k, max_k] for a set of 
+        queries and relevance. It also allows to compute precision and recall for documents 
+        retrieved adopting relevance and pseudo-relevance feedback, by setting the corresponding
+        parameters to True.
+
+        It returns two dictionaries, with values of k as keys and with numpy arrays as values,
+        containing in each element i the precision and recall at k for query i.
+        """
+        ret = dict()
+        rel = dict()
+        for qid in list(queries.keys()):
+            q = self.query_as_vector(queries[qid])
+            rel[qid] = relevance[qid]
+            if rel_feedback:
+                nrel_docs = [i for i in range(self.n_docs) if i not in relevance[qid]]
+                q = self.relevance_feedback_rocchio(q, relevance[qid], nrel_docs)
+            if pseudo_feedback:
+                q = self.pseudo_relevance_feedback(q)
+
+            ret[qid] = self.vector_space_model(q, max_k)
+
+        precision = dict()
+        recall = dict()
+        for k in range(min_k, max_k+1):
+            precision[k] = np.zeros(len(queries.keys()))
+            recall[k] = np.zeros(len(queries.keys()))
+            for qid in list(queries.keys()):
+                precision[k][qid-1] = len( set(list(ret[qid].keys())[:k]).intersection(set(rel[qid])) ) / len(list(ret[qid].keys())[:k])
+                recall[k][qid-1] = len( set(list(ret[qid].keys())[:k]).intersection(set(rel[qid])) ) / len(rel[qid])
+
+        return precision, recall
+
+
+
