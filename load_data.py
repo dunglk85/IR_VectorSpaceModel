@@ -7,6 +7,7 @@ class LoadDataset():
         self.queries = queries_file
         self.relevance = relevance_file
 
+
     def load_docs(self):
         """
         Returns a list of lists where each sub-list contains 
@@ -30,6 +31,7 @@ class LoadDataset():
                     t += row.split()
         return arts
 
+
     def load_queries(self):
         """"
         Returns a dictionary of lists, with keys the queryID 
@@ -37,22 +39,39 @@ class LoadDataset():
         """
         q = dict()
         with open(self.queries, "r") as f:
-            t = []
+            t = ""
             r = False
             for row in f:
                 if row.startswith(".W"):
                     r = True
                     continue
                 if row.startswith(".I"):
-                    if t != []:
+                    if t != "":
                         q[qid] = t
-                    t = []
+                    t = ""
                     r = False
                     qid = int(row[3:].replace("\n", ""))
                 if r:
                     row = re.sub(r'[^a-zA-Z\s]+', '', row)
-                    t += row.split()
+                    t += row
+
+            # t = []
+            # r = False
+            # for row in f:
+            #     if row.startswith(".W"):
+            #         r = True
+            #         continue
+            #     if row.startswith(".I"):
+            #         if t != []:
+            #             q[qid] = t
+            #         t = []
+            #         r = False
+            #         qid = int(row[3:].replace("\n", ""))
+            #     if r:
+            #         row = re.sub(r'[^a-zA-Z\s]+', '', row)
+            #         t += row.split()
         return q
+
 
     def load_relevance(self):
         """"

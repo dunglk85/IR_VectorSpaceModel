@@ -1,4 +1,5 @@
 import re
+import numpy as np
 from collections import defaultdict, OrderedDict, Counter
 from math import log, sqrt
 from os import listdir
@@ -33,7 +34,7 @@ class VectorSpaceModel():
         a list as value, with docIDs of the documents contianing the term.
         """
         idx = dict()
-        for docid in list(self.docs.keys()):  # for each document in the corpus
+        for docid in range(self.n_docs):  # for each document in the corpus
             for pos, t in enumerate(self.docs[docid]):  # for each term in the document
                 idx[t] = idx.get(t, set())
                 idx[t].add(docid)
@@ -62,7 +63,7 @@ class VectorSpaceModel():
         It returns a numpy array of shape (n_docs, n_terms), where each element
         tfidf[i,j] will contain the tfidf for the term j in document i.
         """
-        tfidf = np.zeros((self.n_docs, self.n_terms))
+        self.tfidf = np.zeros((self.n_docs, self.n_terms))
         idf = self.inverse_doc_freq()
 
         for docid in range(self.n_docs):
@@ -71,8 +72,8 @@ class VectorSpaceModel():
             for t in self.vocab:
                 if t in self.docs[docid]:
                     ind = self.vocab.index(t)
-                    tfidf[docid][ind] = idf[t] * count[t]
-        return tfidf
+                    self.tfidf[docid][ind] = idf[t] * count[t]
+        return self.tfidf
 
 
     def query_as_vector(self, query):
@@ -83,14 +84,23 @@ class VectorSpaceModel():
         It returns a numpy array, 0 or 1 in q_vec[i], depending on whether the term
         at index i is present or not in the query.
         """
-        q = self.process_query(query)  # to return a list of terms
-        q_vec = np.zeros(n_terms)
+        q = self.process_text(query)  # to return a list of terms
+        q_vec = np.zeros(self.n_terms)
 
         for t in self.vocab:
             if t in q:
-                ind = vocab.index(t)
+                ind = self.vocab.index(t)
                 q_vec[ind] = 1
         return q_vec
+
+
+    def process_text(self, text):
+        """"
+        Function to process a free-form text.
+
+        It returns a list of processed terms.
+        """
+        return text.split(" ")
 
 
     def relevance_scores(self, query):
@@ -101,22 +111,23 @@ class VectorSpaceModel():
         It returns a dictionary with docID as keys and the cosine similarity 
         sim(q,d) between the query and the corresponding document as values.
         """
-        scores = dict()  # for each document we store the cosine similarity between the query and the document
-        query_terms = self.process_query(query)  # returns a list of the terms present in the query
-        q = self.query_vector(query)
-        q_length = sqrt(sum(q**2))
-
         if self.tfidf is None:
             self.tfidf = self.tfidf_vectors()
 
+        if not isinstance(query, np.ndarray):
+            print(query)
+            query = self.query_as_vector(query)
+        
+        q_length = sqrt(sum(query**2))
+
+        nonzero = np.where(query != 0)[0]
+        scores = dict()  # for each document we store the cosine similarity between the query and the document
         for docid in range(len(self.docs)):
-            d = tfidf[docid,]
+            d = self.tfidf[docid,]
             d_length = sqrt(sum(d**2))
             cos_sim = 0
-            for t in query_terms:
-                if t in self.vocab:
-                    idx = self.vocab.index(t)
-                    cos_sim += (d[idx] * q[idx])
+            for idx in nonzero:
+                cos_sim += (d[idx] * query[idx])
             
             if cos_sim == 0:
                 scores[docid] = 0
@@ -157,13 +168,13 @@ class VectorSpaceModel():
             idx = self.vocab.index(t)
             r = 0
             for docid in rel_docs:
-                r += self.tfidf[docid,].sum()
+                r += self.tfidf[docid,idx]
             r /= len(rel_docs)
 
+            n = 0
             if len(nrel_docs) != 0:
-                n = 0
                 for docid in nrel_docs:
-                    n += self.tfidf[docid,].sum()
+                    n += self.tfidf[docid,idx]
                 n /= len(nrel_docs)
             else:
                 gamma = 0
