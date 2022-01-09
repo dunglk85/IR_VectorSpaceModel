@@ -1,3 +1,4 @@
-cran*
+*_data
 TIME.ALL
+*.gz
 
