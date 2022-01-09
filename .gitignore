@@ -1,4 +1,3 @@
-*_data
-TIME.ALL
-*.gz
+vsm.ipynb
+__pycache__
 
