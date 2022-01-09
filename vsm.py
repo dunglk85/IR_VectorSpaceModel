@@ -99,7 +99,8 @@ class VectorSpaceModel():
         It returns a numpy array, 0 or 1 in q_vec[i], depending on whether the term
         at index i is present or not in the query.
         """
-        q = self.preprocess_tokens(query.split())  # to return a list of terms
+        q = re.sub(r'[^a-zA-Z\s]+', '', query)
+        q = self.preprocess_tokens(q.split())  # to return a list of terms
         q_vec = np.zeros(self.n_terms)
 
         for t in self.vocab:
@@ -118,7 +119,7 @@ class VectorSpaceModel():
         sim(q,d) between the query and the corresponding document as values.
         """
         if self.tfidf is None:
-            self.tfidf = self.tfidf_vectors()
+            self.tfidf = self.docs_as_vectors()
 
         if not isinstance(query, np.ndarray):
             query = self.query_as_vector(query)
@@ -164,7 +165,7 @@ class VectorSpaceModel():
         It returns the optimized query vector.
         """
         if self.tfidf is None:
-            self.tfidf = self.tfidf_vectors()
+            self.tfidf = self.docs_as_vectors()
         
         if not isinstance(query, np.ndarray):
             query = self.query_as_vector(query)
