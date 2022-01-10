@@ -11,7 +11,10 @@ Repository organization:
 
 - `load_data.py`: script with the class `LoadDataset()` used to load the corpus of documents, and the queries and relevance documents files, if any.
 
-- `vsm.py`: script with the class `VectorSpaceModel()` used to perform the retrieval. It contains functions to compute the TF-IDF for each term in each document, to vectorize documents and queries and to perform relevance and pseudo-relevance feedback. It contains also a function to perform standard preprocessing of terms and a function to evaluate the retrieval, given a set of queries and known associated relevant documents.
+- `vsm.py`: script with the class `VectorSpaceModel()` used to perform the retrieval. An object of such class is initialized by giving as parameter a list of tokens (for example the dataset loaded with the `LoadDataset()` functions), which will then be preprocessed through stop words removal and stemming and stored in the `docs` attribute. Then, the inverted index for the list of terms in the corpus is build, as well as the vocabulary containing all the terms in the collection, and stored as attributes of the object (`index` and `vocab` attributes), together with the number of documents (`n_docs`) and the number of terms (`n_terms`). Once the TF-IDF is computed, it is stored as well as attribute (`tfidf`).
+
+    It contains functions to compute the TF-IDF for each term in each document, to vectorize documents and queries and to perform relevance and pseudo-relevance feedback.
+    It contains also a function to perform standard preprocessing of terms and a function to evaluate the retrieval, given a set of queries and known associated relevant documents.
 
 - `ranked_retrieval.ipynb`: notebook with all the implemented functions shown at work, on the Medline dataset. It shows also an evaluation in the performance of the program, through the computation of precision, recall and mean average precision.
 

@@ -10,8 +10,9 @@ class LoadDataset():
 
     def load_docs(self):
         """
-        Returns a list of lists where each sub-list contains 
-        all the terms in the document at index i.
+        Returns a list of lists where each sub-list contains all the terms 
+        in the document at index i.
+        The terms are not yet preprocessed through stemming or lemmatization.
         """
         arts = []
         with open(self.corpus, "r") as f:
@@ -34,8 +35,8 @@ class LoadDataset():
 
     def load_queries(self):
         """"
-        Returns a dictionary of lists, with keys the queryID 
-        and as values a list of terms occurring in the query.
+        Returns a dictionary of lists, with keys the queryID and as values 
+        the query as a string in free-form text, removing punctuation.
         """
         q = dict()
         with open(self.queries, "r") as f:

@@ -26,6 +26,12 @@ class VectorSpaceModel():
 
 
     def preprocess_tokens(self, tokens):
+        """"
+        Function to perform standard preprocessing.
+        
+        Given a list of tokens, it performs stop words removal and stemming, 
+        and returns the list of clean tokens.
+        """
         st = PorterStemmer()
         sw = stopwords.words('english')
 
@@ -35,18 +41,11 @@ class VectorSpaceModel():
         return tokens
 
 
-    def get_vocabulary(self):
-        """"
-        Returns the list of terms in the collection.
-        """
-        return list(self.index.keys())
-
-
     def inverted_index(self):
         """
         Builds an inverted index.
         Returns a dictionary with terms as keys and for each term it stores 
-        a list as value, with docIDs of the documents contianing the term.
+        the set of docIDs as value, of the documents containing the term.
         """
         idx = dict()
         for docid in range(self.n_docs):  # for each document in the corpus
@@ -54,6 +53,13 @@ class VectorSpaceModel():
                 idx[t] = idx.get(t, set())
                 idx[t].add(docid)
         return idx
+
+
+    def get_vocabulary(self):
+        """"
+        Returns the list of terms in the collection.
+        """
+        return list(self.index.keys())
 
 
     def inverse_doc_freq(self):
@@ -118,10 +124,10 @@ class VectorSpaceModel():
         It returns a dictionary with docID as keys and the cosine similarity 
         sim(q,d) between the query and the corresponding document as values.
         """
-        if self.tfidf is None:
+        if self.tfidf is None:  # checks if the tfidf has already been computed
             self.tfidf = self.docs_as_vectors()
 
-        if not isinstance(query, np.ndarray):
+        if not isinstance(query, np.ndarray):  # checks if the query is already a vector
             query = self.query_as_vector(query)
         
         q_length = sqrt(sum(query**2))
@@ -139,7 +145,6 @@ class VectorSpaceModel():
                 scores[docid] = 0
             else:
                 scores[docid] = cos_sim / (q_length * d_length)
-
         return scores
 
 
@@ -151,7 +156,10 @@ class VectorSpaceModel():
         It returns a dictionary with the k documents with the highest score. The keys 
         of the dictionary are the docIDs and the corresponding values are the computed score.
         """
+        # first computes the relevance score given the query
         scores = self.relevance_scores(query)
+
+        # sorts the results and returns the top k documents
         sorted_value = OrderedDict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
         topk = {key : sorted_value[key] for key in list(sorted_value)[:k] if sorted_value[key]!=0}
 
@@ -162,15 +170,16 @@ class VectorSpaceModel():
         """"
         Function implementing the Rocchio algorithm for the relevance feedback.
 
-        It returns the optimized query vector.
+        It returns the optimized query vector obtained by applying the Rocchio model.
         """
-        if self.tfidf is None:
+        if self.tfidf is None:  # checks if the tfidf has already been computed
             self.tfidf = self.docs_as_vectors()
         
-        if not isinstance(query, np.ndarray):
+        if not isinstance(query, np.ndarray):  # checks if the query is already a vector
             query = self.query_as_vector(query)
-        q_opt = np.zeros(self.n_terms)
         
+        q_opt = np.zeros(self.n_terms)
+
         for t in self.vocab:
             idx = self.vocab.index(t)
             r = 0
@@ -184,12 +193,11 @@ class VectorSpaceModel():
                     n += self.tfidf[docid,idx]
                 n /= len(nrel_docs)
             else:
-                gamma = 0
+                gamma = 0  # if we do not have the list of non-relevand documents, it sets gamma to 0
 
             opt = alpha*query[idx] + beta*r - gamma*n
             if opt > 0:
                 q_opt[idx] = opt
-
         return q_opt
 
 
