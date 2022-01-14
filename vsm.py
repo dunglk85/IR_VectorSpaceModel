@@ -35,7 +35,7 @@ class VectorSpaceModel():
         st = PorterStemmer()
         sw = stopwords.words('english')
 
-        tokens = [word for word in tokens if word not in sw]
+        tokens = [word.lower() for word in tokens if word not in sw]
         tokens = [st.stem(word) for word in tokens]
         tokens = [word for word in tokens if word not in sw]
         return tokens

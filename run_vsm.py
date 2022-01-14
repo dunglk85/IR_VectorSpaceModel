@@ -3,8 +3,8 @@ import sys
 from load_data import LoadDataset 
 from vsm import VectorSpaceModel
 
-QUERY = "the relationship of blood and cerebrospinal fluid oxygen concentrations or partial pressures.  a method of interest is polarography."
-RELEVANT_DOCS = "13,14,15,72,79,138,142,164,165,166,167,168,169,170,171,172,180,181,182,183,184,185,186,211,212,499,500,501,502,503,504,506,507,508,510,511,513"
+QUERY = " the crystalline lens in vertebrates including humans"
+RELEVANT_DOCS = "12,13,14,71,78,137,141,163,164,165,166,167,168,169,170,171,179,180,181,182,183,184,185,210,211,498,499,500,501,502,503,505,506,507,509,510,512"
 K = 10
 PSEUDO = True
 

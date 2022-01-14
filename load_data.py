@@ -18,6 +18,7 @@ class LoadDataset():
         with open(self.corpus, "r") as f:
             t = []
             r = False
+            i = 0
             for row in f:
                 if row.startswith(".W"):
                     r = True
@@ -30,6 +31,7 @@ class LoadDataset():
                 if r:
                     row = re.sub(r'[^a-zA-Z\s]+', '', row)
                     t += row.split()
+                i += 1
         return arts
 
 
@@ -69,6 +71,6 @@ class LoadDataset():
             for row in f:
                 r = row.split(" ")
                 qid = int(r[0])
-                rel[qid] = rel.get(qid, []) + [int(r[2])]
+                rel[qid] = rel.get(qid, []) + [int(r[2])-1]
         return rel
 
