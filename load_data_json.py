@@ -1,14 +1,14 @@
 import json
 
 
-class Process():
+class LoadDataset():
     def __init__(self, corpus_file, queries_file, relevance_file):
         self.corpus = corpus_file
-        self.queries = queries_file
-        self.relevance = relevance_file
+        self.query_file = queries_file
+        self.relevance_file = relevance_file
         self.docs = None
         self.queries = None
-        self.relevance = None
+        self.relevances = None
 
 
     def load_docs(self):
@@ -29,7 +29,7 @@ class Process():
         Returns a dictionary of lists, with keys the queryID and as values 
         the query as a string in free-form text, removing punctuation.
         """
-        with open(self.queries, "r") as f:
+        with open(self.query_file, "r") as f:
            data = json.load(f)
            self.queries = [x['QUERY'] for x in data['QUERIES']]
 
@@ -40,7 +40,7 @@ class Process():
         as values the list of documents relevant to that query.
         """
         rel = dict()
-        with open(self.relevance, "r") as f:
+        with open(self.relevance_file, "r") as f:
             t = []
             for row in f:
                 r = row.split(" ")
