@@ -24,32 +24,33 @@ class VectorSpaceModel():
     def preprocess(self, k, tridiag=False):
         self.k = k
         self.tridiag = tridiag
+        self.reortho = []
         A = self.A
         len = self.len
         n = self.n
-        epsilon = np.finfo(float).eps
+        epsilon = np.finfo(np.float64).eps
         eta = epsilon ** (3/4)
         sqrt_epsilon = np.sqrt(epsilon)
-        q = [np.zeros(len) for i in range(k)]
-        a = np.zeros(n)
-        beta = np.zeros(k)
-        alpha = np.zeros(k)
+        q = [np.zeros(len, dtype=np.float64) for i in range(k)]
+        a = np.zeros(n, dtype=np.float64)
+        beta = np.zeros(k, dtype=np.float64)
+        alpha = np.zeros(k, dtype=np.float64)
         v = np.random.rand(len)
         q[0] = v / np.linalg.norm(v)
-        A_T = A.transpose()  # Transpose of A in CSR format
         memo = {}
-        count = 0
+        # count = 0
         for i in range(k-1):
             if self.left:
-                q_hat = A_T.dot(q[i])
+                q_hat = A.T.dot(q[i])
                 w = A.dot(q_hat) - beta[i] * q[i-1]
                 alpha[i] = w.dot(q[i])
                 a = a + np.square(q_hat)
             else:
                 q_hat = A.dot(q[i])
-                w = A_T.dot(q_hat) - beta[i] * q[i-1]
+                w = A.T.dot(q_hat) - beta[i] * q[i-1]
                 alpha[i] = w.dot(q[i])
                 a = a + alpha[i]*np.square(q[i]) + 2*beta[i]*np.multiply(q[i], q[i-1])
+            
             w = w - alpha[i] * q[i]
             
             beta[i+1] = np.linalg.norm(w)
@@ -59,12 +60,13 @@ class VectorSpaceModel():
             for j in range(i):
                 omega = self._calculate_omega(len, i+1, j, beta, alpha, memo, eps=epsilon)
                 if abs(omega) > sqrt_epsilon:
+                    if self.tridiag:
+                        self.reortho.append((i,j))
                     w = w - w.dot(q[j]) * q[j]
                 if abs(omega) < eta:
                     break
-                #w = w - w.dot(q[j]) * q[j]
             q[i+1] = w / beta[i+1]
-        print(count)
+        # print(count)
         self.norms = a
         if tridiag:
             self.alpha = alpha
@@ -129,27 +131,39 @@ class VectorSpaceModel():
         return helper(i, j)
 
 
+    
     def response(self, query):
-        A_T = self.A.transpose()
         if not self.left:
-            query = A_T.dot(query)    
-        s = np.zeros(self.n)  # Initialize s_hat with zeros
-        q = self.lanczos_vectors[0]
+            query = self.A.T.dot(query)
+
+        s = np.zeros(self.len)
         if self.tridiag:
-            q0 = np.zeros_like(q) 
-            q = self.q1
-        for i in range(self.k):
-            s += np.dot(q, query) * q  # Update s_hat
+            q = [np.zeros(self.len) for _ in range(self.k)]
+            q[0] = self.q1
+        else:
+            q = self.lanczos_vectors
+        
+        for i in range(self.k-1):
+            q_dot_query = q[i] @ query
+            s = s + q_dot_query * q[i]
+
             if self.tridiag:
-                if self.beta[i+1] == 0:
-                    break
-                Aq= self.A.dot(q)
-                w = A_T.dot(Aq) - self.beta[i]*q0 - self.alpha[i]*q
-                q0 = q
-                q = w/self.beta[i+1]
-            else:
-                q = self.lanczos_vectors[i+1]
+                if self.left:
+                    Aq = self.A.T.dot(q[i])
+                    w = self.A.dot(Aq)
+                else:
+                    Aq = self.A.dot(q[i])
+                    w = self.A.T.dot(Aq)
+
+                w = w - self.beta[i] * q[i-1] - self.alpha[i] * q[i]
+                for j in range(i):
+                    if (i, j) in self.reortho:
+                        w -= (w @ q[j]) * q[j]
+                q[i+1] = w / self.beta[i+1]
+        q_dot_query = q[self.k-1] @ query
+        s = s + q_dot_query * q[self.k-1]
+
         if self.left:
-            self.scores = A_T.dot(s)
+            self.scores = self.A.T.dot(s)
         else:
             self.scores = s
