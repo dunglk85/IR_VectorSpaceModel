@@ -9,7 +9,7 @@ class LoadDataset():
         self.relevance_file = relevance_file
         self.doc_matrix = None
         self.query_vectors = None
-        self.tdidf = TfidfVectorizer(stop_words='english')
+        self.tdidf = TfidfVectorizer(stop_words='english', max_df=0.5)
         self._load_docs()
         self._load_queries()
         self.relevances = self._load_relevance()

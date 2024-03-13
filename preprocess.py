@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse.linalg import svds, eigsh
 
 class VectorSpaceModel():
     def __init__(self, docs):
@@ -19,27 +20,26 @@ class VectorSpaceModel():
         self.scores = None
         self.len = min(m, n)
         self.n = n
+        v = np.random.rand(self.len)
+        self.q1 = v / np.linalg.norm(v)
 
 
     def preprocess(self, k, tridiag=False):
         self.k = k
         self.tridiag = tridiag
-        self.reortho = []
+        self.reortho = {}
         A = self.A
         len = self.len
         n = self.n
-        epsilon = np.finfo(np.float64).eps
-        eta = epsilon ** (3/4)
-        sqrt_epsilon = np.sqrt(epsilon)
-        q = [np.zeros(len, dtype=np.float64) for i in range(k)]
-        a = np.zeros(n, dtype=np.float64)
-        beta = np.zeros(k, dtype=np.float64)
-        alpha = np.zeros(k, dtype=np.float64)
-        v = np.random.rand(len)
-        q[0] = v / np.linalg.norm(v)
+        epsilon = np.sqrt(np.finfo(np.float64).eps)
+        q = [np.zeros(len) for i in range(self.k)]
+        a = np.zeros(n)
+        beta = np.zeros(self.k)
+        alpha = np.zeros(self.k)
+        q[0] = self.q1
         memo = {}
-        # count = 0
-        for i in range(k-1):
+        count = 0
+        for i in range(self.k-1):
             if self.left:
                 q_hat = A.T.dot(q[i])
                 w = A.dot(q_hat) - beta[i] * q[i-1]
@@ -52,89 +52,38 @@ class VectorSpaceModel():
                 a = a + alpha[i]*np.square(q[i]) + 2*beta[i]*np.multiply(q[i], q[i-1])
             
             w = w - alpha[i] * q[i]
+            ## start full reorthonization
+            # for j in range(i):
+            #     w_dotq = w @ q[j]
+            #     w = w - w_dotq * q[j]
             
+            # start partial reorthonization
+            bound = np.linalg.norm(w) * epsilon
+            for j in range(i):
+                w_dotq = w @ q[j]
+                if abs(w_dotq) > bound:
+                    self.reortho[(i,j)] = w_dotq
+                    w = w - w_dotq * q[j]
+            # end partial reorthonization
+
             beta[i+1] = np.linalg.norm(w)
             if beta[i+1] == 0:
                 self.k = i
                 break
-            for j in range(i):
-                omega = self._calculate_omega(len, i+1, j, beta, alpha, memo, eps=epsilon)
-                if abs(omega) > sqrt_epsilon:
-                    if self.tridiag:
-                        self.reortho.append((i,j))
-                    w = w - w.dot(q[j]) * q[j]
-                if abs(omega) < eta:
-                    break
             q[i+1] = w / beta[i+1]
-        # print(count)
-        self.norms = a
-        if tridiag:
-            self.alpha = alpha
-            self.beta = beta
-            self.q1 = q[0]
-        else:
-            self.lanczos_vectors = q
 
-# Example usage:
-# A_sparse = csr_matrix(A)  # Convert A to CSR format
-# k = 5  # Number of vectors to compute
-# q, a = left_project_process_sparse(A_sparse, k)
-# print(q, a)
-
-
-    def _calculate_epsilon_j(self, n, beta_2, beta_iplus1, eps):
-        # Generate Psi from N(0, 0.6)
-        Psi = np.random.normal(0, 0.6)
-        
-        # Calculate epsilon_j
-        epsilon_j = n * eps * (beta_2 / beta_iplus1) * Psi
-        
-        return epsilon_j
-
-    def _calculate_nu_ij(self, beta_jplus1, beta_iplus1, eps):
-        # Generate Theta from N(0, 0.3)
-        Theta_value = np.random.normal(0, 0.3)
-        
-        # Calculate nu_ij
-        nu_ij = (beta_jplus1 + beta_iplus1) * eps * Theta_value
-        
-        return nu_ij
-
-    def _calculate_omega(self, m, i, j, beta, alpha, memo, eps):
-        def helper(i, j):
-            # Check if the value has already been computed
-            if (i, j) in memo:
-                return memo[(i, j)]
-            if (j, i) in memo:
-                return memo[(j, i)]
-            # Implement calculation of omega_ij based on provided properties
-            if j < 0:
-                result = 0
-            elif j == i:
-                result = 1
-            elif j == i - 1:
-                result = self._calculate_epsilon_j(m, beta[1], beta[i], eps=eps)
-            else:
-                omega_ijplus = helper(i-1, j+1)
-                omega_ij = helper(i-1, j)
-                omega_iminusj = helper(i-2, j)
-                omega_ijminus = helper(i-1, j-1)
-                result = (beta[j+1]*omega_ijplus + (alpha[j] - alpha[i])*omega_ij\
-                    + beta[j]*omega_ijminus - beta[i]*omega_iminusj) / beta[i] \
-                    + self._calculate_nu_ij(beta[i], beta[j+1], eps)
-            
-            # Memoize the computed value
-            memo[(i, j)] = result
-            return result
-        
-        # Call the helper function with arguments i and j
-        return helper(i, j)
-
+        self.alpha = alpha
+        self.beta = beta
+        self.q1 = q[0]
+        self.lanczos_vectors = q
 
     
     def response(self, query):
-        if not self.left:
-            query = self.A.T.dot(query)
+        s_hat = np.zeros(self.len)
+        if self.left:
+            s_hat = query
+        else:
+            s_hat = self.A.T.dot(query)
 
         s = np.zeros(self.len)
         if self.tridiag:
@@ -144,7 +93,7 @@ class VectorSpaceModel():
             q = self.lanczos_vectors
         
         for i in range(self.k-1):
-            q_dot_query = q[i] @ query
+            q_dot_query = q[i] @ s_hat
             s = s + q_dot_query * q[i]
 
             if self.tridiag:
@@ -158,12 +107,39 @@ class VectorSpaceModel():
                 w = w - self.beta[i] * q[i-1] - self.alpha[i] * q[i]
                 for j in range(i):
                     if (i, j) in self.reortho:
-                        w -= (w @ q[j]) * q[j]
+                        if self.reortho[(i,j)] == 0:
+                            break
+                        w = w - self.reortho[(i,j)] * q[j]
                 q[i+1] = w / self.beta[i+1]
-        q_dot_query = q[self.k-1] @ query
+                 
+        q_dot_query = q[self.k-1] @ s_hat
         s = s + q_dot_query * q[self.k-1]
 
         if self.left:
             self.scores = self.A.T.dot(s)
         else:
             self.scores = s
+
+
+    def lsi_preprocess(self, k):
+        u, s, vt = svds(self.A,k=k)
+        row_norms = np.linalg.norm(vt.T * s, axis=1)
+        return u, s, vt, row_norms
+    
+    def lsi_response(self, u, s, vt, query):
+        ndot = query.T.dot(u)
+        return ndot.dot(np.diag(s)).dot(vt)
+    
+
+    import numpy as np
+
+    def _svd(self):
+        T = np.diag(alpha) + np.diag(beta[:-1], 1) + np.diag(beta[:-1], -1)
+        eigenvalues, eigenvectors = eigsh(T, k=k)
+        return eigenvalues, eigenvectors
+
+    def svd_response(self, eigenvectors, query):
+        if self.left:
+            pass
+
+    
