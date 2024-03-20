@@ -76,6 +76,7 @@ class VectorSpaceModel():
         self.beta = beta
         self.q1 = q[0]
         self.lanczos_vectors = q
+        self.norms = a
 
     
     def response(self, query):
@@ -142,4 +143,45 @@ class VectorSpaceModel():
         if self.left:
             pass
 
-    
+    def implicit_qr_algorithm(alpha, beta, max_iterations=100, tolerance=1e-10):
+        n = len(alpha)
+        eigenvectors = np.eye(n)
+
+        for _ in range(max_iterations):
+            # Perform implicit QR step
+            d = (alpha[n-2] - alpha[n-1])/2
+            mu = alpha[n-1] - beta[n-1]**2/(d + math.sign(d)*np.sqrt(d**2 + beta[n-1]**2))
+            x = alpha[0] - mu
+            z = -beta[1]
+            for i in range(n - 1):
+                # Compute the Givens rotation
+                if abs(x) > tolerance:
+                    theta = np.arctan(z / x)
+                else:
+                    theta = np.pi / 2
+
+                c = np.cos(theta)
+                s = np.sin(theta)
+
+                eigenvectors[:, [i, i + 1]] = eigenvectors[:, [i, i + 1]] @ np.array([[c, s], [-s, c]])
+                
+                beta[i] = c*beta[i] + s*z
+                if i < n - 2:
+                    z = s * beta[i+2]
+                    beta[i+2] = c*beta[i+2]
+
+                tem_a_1 = alpha[i]
+                tem_a_2 = alpha[i+1]
+                alpha[i] = c*c * tem_a_1 - 2*c*s * beta[i+1] + s*s*tem_a_2
+                alpha[i+1] = s*s * tem_a_1 + 2*c*s * beta[i+1] + c*c*tem_a_2
+                beta[i+1] = s*c*(tem_a_1 - tem_a_2) + beta[i+1]*(c*c - s*s)
+
+                x = beta[i+1]
+
+            # Check for convergence
+            off_diag = beta[1:] @ beta[1:]
+
+            if off_diag < tolerance:
+                break
+
+        return alpha, eigenvectors
