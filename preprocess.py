@@ -2,6 +2,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse.linalg import svds, eigsh
+import math
 
 class VectorSpaceModel():
     def __init__(self, docs):
@@ -143,20 +144,24 @@ class VectorSpaceModel():
         if self.left:
             pass
 
-    def implicit_qr_algorithm(alpha, beta, max_iterations=100, tolerance=1e-10):
+    def implicit_qr_algorithm(self, alpha, beta, eigenvectors=None, max_iterations=100, tolerance=1e-10):
         n = len(alpha)
-        eigenvectors = np.eye(n)
+        if n < 3:
+            return alpha, eigenvectors
+        if np.all(eigenvectors == None):
+            eigenvectors = np.eye(n)
 
         for _ in range(max_iterations):
             # Perform implicit QR step
             d = (alpha[n-2] - alpha[n-1])/2
-            mu = alpha[n-1] - beta[n-1]**2/(d + math.sign(d)*np.sqrt(d**2 + beta[n-1]**2))
+            sign_d = -1 if d < 0 else 1
+            mu = alpha[n-1] - beta[n-1]*beta[n-1]/(d + sign_d*np.sqrt(d*d + beta[n-1]*beta[n-1]))
             x = alpha[0] - mu
-            z = -beta[1]
+            z = beta[1]
             for i in range(n - 1):
                 # Compute the Givens rotation
                 if abs(x) > tolerance:
-                    theta = np.arctan(z / x)
+                    theta = np.arctan(-z / x)
                 else:
                     theta = np.pi / 2
 
@@ -165,9 +170,9 @@ class VectorSpaceModel():
 
                 eigenvectors[:, [i, i + 1]] = eigenvectors[:, [i, i + 1]] @ np.array([[c, s], [-s, c]])
                 
-                beta[i] = c*beta[i] + s*z
+                beta[i] = c*beta[i] - s*z
                 if i < n - 2:
-                    z = s * beta[i+2]
+                    z = -s * beta[i+2]
                     beta[i+2] = c*beta[i+2]
 
                 tem_a_1 = alpha[i]
@@ -176,11 +181,16 @@ class VectorSpaceModel():
                 alpha[i+1] = s*s * tem_a_1 + 2*c*s * beta[i+1] + c*c*tem_a_2
                 beta[i+1] = s*c*(tem_a_1 - tem_a_2) + beta[i+1]*(c*c - s*s)
 
+                if beta[i+1] < tolerance:
+                    alpha_1, eig_1 = self.implicit_qr_algorithm(alpha[:i+2], beta[:i+2],eigenvectors=eigenvectors[:,:i+2])
+                    alpha_2, eig_2 = self.implicit_qr_algorithm(alpha[i+2:], beta[i+2:],eigenvectors=eigenvectors[:,i+2:])
+                    return np.concatenate((alpha_1, alpha_2)), np.concatenate((eig_1, eig_2), axis=1)
                 x = beta[i+1]
+                
+
 
             # Check for convergence
-            off_diag = beta[1:] @ beta[1:]
-
+            off_diag = np.sum(np.abs(beta[1:]))
             if off_diag < tolerance:
                 break
 
