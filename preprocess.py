@@ -13,35 +13,31 @@ class VectorSpaceModel():
         self.A = docs
         m, n = docs.shape
         self.left = m < n
-        self.alpha = None
-        self.beta = None
-        self.lanczos_vectors = None
-        self.norms = None
-        self.q1 = None
-        self.scores = None
-        self.len = min(m, n)
-        self.n = n
-        v = np.random.rand(self.len)
-        self.q1 = v / np.linalg.norm(v)
 
-
-    def preprocess(self, k, tridiag=False):
-        self.k = k
-        self.tridiag = tridiag
-        self.reortho = {}
-        A = self.A
-        len = self.len
-        n = self.n
-        epsilon = np.sqrt(np.finfo(np.float64).eps)
-        q = np.zeros((len, k))
-        a = np.zeros(n)
-        beta = np.zeros(self.k)
-        alpha = np.zeros(self.k)
-        q[:,0] = self.q1
-        memo = {}
-        count = 0
-        for i in range(self.k-1):
+    def preprocess(self, k, indices = None, tridiag=False):
+        # reortho = {}
+        if indices:
             if self.left:
+                A = self.A[indices, :]
+            else:
+                A = self.A[:, indices]
+        else:
+            A = self.A
+        m, n = A.shape
+        if m < n:
+            v = np.random.rand(m)
+            q = np.zeros((m, k))
+        else:
+            v = np.random.rand(n)
+            q = np.zeros((n, k))
+        epsilon = np.sqrt(np.finfo(np.float64).eps)
+        a = np.zeros(n)
+        beta = np.zeros(k)
+        alpha = np.zeros(k)
+        q[:,0] = v/np.linalg.norm(v)
+        
+        for i in range(k-1):
+            if m < n:
                 q_hat = A.T.dot(q[:,i])
                 w = A.dot(q_hat) - beta[i] * q[:,i-1]
                 alpha[i] = w.dot(q[:,i])
@@ -63,72 +59,79 @@ class VectorSpaceModel():
             for j in range(i):
                 w_dotq = w @ q[:,j]
                 if abs(w_dotq) > bound:
-                    self.reortho[(i,j)] = w_dotq
+                    # self.reortho[(i,j)] = w_dotq
                     w = w - w_dotq * q[:,j]
             # end partial reorthonization
 
             beta[i+1] = np.linalg.norm(w)
             if beta[i+1] == 0:
-                self.k = i
                 break
             q[:,i+1] = w / beta[i+1]
-
-        self.alpha = alpha
-        self.beta = beta
-        self.q1 = q[:,0]
-        self.lanczos_vectors = q
-        self.norms = a
+ 
+        return alpha, beta, q, a
 
     
-    def response(self, query):
-        s_hat = np.zeros(self.len)
+    def response(self, alpha, beta, q, query, indices=None):
+        if indices:
+            if self.left:
+                A = self.A[indices, :]
+            else:
+                A = self.A[:, indices]
+        else:
+            A = self.A
+
+        len, k = q.shape
+        s_hat = np.zeros(len)
+
         if self.left:
             s_hat = query
         else:
             s_hat = self.A.T.dot(query)
 
-        s = np.zeros(self.len)
-        if self.tridiag:
-            q = np.zeros((self.len, self.k))
-            q[:,0] = self.q1
-        else:
-            q = self.lanczos_vectors
-        
-        for i in range(self.k-1):
+        s = np.zeros(len)
+
+        # if self.tridiag:
+        #     q = np.zeros((self.len, self.k))
+        #     q[:,0] = self.q1
+        # else:
+        #     q = self.lanczos
+
+        # range k-1 if tridiag
+        for i in range(k):
             q_dot_query = q[:,i] @ s_hat
             s = s + q_dot_query * q[:,i]
 
-            if self.tridiag:
-                if self.left:
-                    Aq = self.A.T.dot(q[:,i])
-                    w = self.A.dot(Aq)
-                else:
-                    Aq = self.A.dot(q[:,i])
-                    w = self.A.T.dot(Aq)
+            # if self.tridiag:
+            #     if self.left:
+            #         Aq = self.A.T.dot(q[:,i])
+            #         w = self.A.dot(Aq)
+            #     else:
+            #         Aq = self.A.dot(q[:,i])
+            #         w = self.A.T.dot(Aq)
 
-                w = w - self.beta[i] * q[:,i-1] - self.alpha[i] * q[:,i]
-                for j in range(i):
-                    if (i, j) in self.reortho:
-                        if self.reortho[(i,j)] == 0:
-                            break
-                        w = w - self.reortho[(i,j)] * q[:,j]
-                q[:,i+1] = w / self.beta[i+1]
+            #     w = w - self.beta[i] * q[:,i-1] - self.alpha[i] * q[:,i]
+            #     for j in range(i):
+            #         if (i, j) in self.reortho:
+            #             if self.reortho[(i,j)] == 0:
+            #                 break
+            #             w = w - self.reortho[(i,j)] * q[:,j]
+            #     q[:,i+1] = w / self.beta[i+1]
                  
-        q_dot_query = q[:,self.k-1] @ s_hat
-        s = s + q_dot_query * q[:,self.k-1]
+        # q_dot_query = q[:,k-1] @ s_hat
+        # s = s + q_dot_query * q[:,k-1]
 
         if self.left:
-            self.scores = self.A.T.dot(s)
+            return A.T.dot(s)
         else:
-            self.scores = s
+            return s
 
 
-    def implicit_qr_algorithm(self, alpha, beta, eigenvectors=None, tolerance=1e-10):
+    def implicit_qr_algorithm(self, alpha, beta, eigs=None, tolerance=1e-10):
         n = len(alpha)
         if n < 3:
-            return alpha, eigenvectors
-        if np.all(eigenvectors == None):
-            eigenvectors = np.eye(n)
+            return alpha, eigs
+        if np.all(eigs == None):
+            eigs = np.eye(n)
 
         for _ in range(100):
             # Perform implicit QR step
@@ -144,7 +147,7 @@ class VectorSpaceModel():
                 c = np.cos(theta)
                 s = np.sin(theta)
 
-                eigenvectors[:, [i, i + 1]] = eigenvectors[:, [i, i + 1]] @ np.array([[c, s], [-s, c]])
+                eigs[:, [i, i + 1]] = eigs[:, [i, i + 1]] @ np.array([[c, s], [-s, c]])
                 
                 beta[i] = c*beta[i] - s*z
                 if i < n - 2:
@@ -158,12 +161,75 @@ class VectorSpaceModel():
                 beta[i+1] = s*c*(tem_a_1 - tem_a_2) + beta[i+1]*(c*c - s*s)
 
                 if abs(beta[i+1]) < tolerance:
-                    alpha_1, eig_1 = self.implicit_qr_algorithm(alpha[:i+2], beta[:i+2],eigenvectors=eigenvectors[:,:i+2])
-                    alpha_2, eig_2 = self.implicit_qr_algorithm(alpha[i+2:], beta[i+2:],eigenvectors=eigenvectors[:,i+2:])
+                    alpha_1, eig_1 = self.implicit_qr_algorithm(alpha[:i+2], beta[:i+2],eigs=eigs[:,:i+2])
+                    alpha_2, eig_2 = self.implicit_qr_algorithm(alpha[i+2:], beta[i+2:],eigs=eigs[:,i+2:])
                     return np.concatenate((alpha_1, alpha_2)), np.concatenate((eig_1, eig_2), axis=1)
                 
                 x = beta[i+1]
 
-        return alpha, eigenvectors
+        return alpha, eigs
 
+    def bisec_PDDP(self, indices=None, iter = 4):
+        if indices:
+            if self.left:
+                A = self.A[indices, :]
+            else: 
+                A = self.A[:, indices]
+        else:
+            A = self.A
+
+        m, n = A.shape
+
+        if m < n:
+            d = np.sum(A, axis=0)/m
+            q = np.zeros((m, iter))
+            v = np.random.rand(m)
+        else:
+            d = np.sum(A, axis=1)/n
+            q = np.zeros((n, iter))
+            v = np.random.rand(n)
+        
+        q[:,0] = vv/np.linalg.norm(v)
+        d = np.array(d).flatten()
+        
+        # lanczos
+        alpha = np.zeros(iter)
+        beta = np.zeros(iter)
+        
+        for i in range(iter-1):
+            if m < n:
+                q_hat = A.T.dot(q[:,i]) - np.full(m, q[:,i] @ d)
+                w = A.dot(q_hat) - beta[i] * q[:,i-1] - np.sum(q_hat) * d
+            else:
+                q_hat = A.dot(q[:,i]) - np.sum(q[:,i]) * d
+                w = A.T.dot(q_hat) - beta[i] * q[:,i-1] - np.full(n, q_hat @ d)
+
+            alpha[i] = w.dot(q[:,i])
+            w = w - alpha[i] * q[:,i]
+
+            # # start full reorthonization
+            # for j in range(i):
+            #     w_dotq = w @ q[:,j]
+            #     w = w - w_dotq * q[:,j]
+
+            beta[i+1] = np.linalg.norm(w)
+            if beta[i+1] == 0:
+                break
+            q[:,i+1] = w / beta[i+1]
+        # end lanczos
+
+        eigvalues, eigvectors = self.implicit_qr_algorithm(alpha=alpha, beta=beta)
+        principal = q.dot(eigvectors[:,0])
+
+        if m < n:
+            median = np.median(principal)
+            return np.where(principal <= median)[0], np.where(principal > median)[0]
+        else:
+            lo_bound = np.quantile(x,.45)
+            up_bound = np.quantile(x,.55)
+            return np.where(principal < up_bound)[0], np.where(principal > lo_bound)[0]
+        
+
+
+        
 
