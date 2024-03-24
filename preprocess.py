@@ -14,15 +14,15 @@ class VectorSpaceModel():
         m, n = docs.shape
         self.left = m < n
 
-    def preprocess(self, k, indices = None, tridiag=False):
+    def preprocess(self, k, indices = None):
         # reortho = {}
-        if indices:
-            if self.left:
-                A = self.A[indices, :]
-            else:
-                A = self.A[:, indices]
-        else:
+        if np.all(indices==None):
             A = self.A
+        elif self.left:
+            A = self.A[indices, :]
+        else:
+            A = self.A[:, indices]
+            
         m, n = A.shape
         if m < n:
             v = np.random.rand(m)
@@ -72,13 +72,12 @@ class VectorSpaceModel():
 
     
     def response(self, alpha, beta, q, query, indices=None):
-        if indices:
-            if self.left:
-                A = self.A[indices, :]
-            else:
-                A = self.A[:, indices]
-        else:
+        if np.all(indices==None):
             A = self.A
+        elif self.left:
+            A = self.A[indices, :]
+        else:
+            A = self.A[:, indices]
 
         len, k = q.shape
         s_hat = np.zeros(len)
@@ -86,7 +85,7 @@ class VectorSpaceModel():
         if self.left:
             s_hat = query
         else:
-            s_hat = self.A.T.dot(query)
+            s_hat = A.T.dot(query)
 
         s = np.zeros(len)
 
@@ -170,13 +169,12 @@ class VectorSpaceModel():
         return alpha, eigs
 
     def bisec_PDDP(self, indices=None, iter = 4):
-        if indices:
-            if self.left:
-                A = self.A[indices, :]
-            else: 
-                A = self.A[:, indices]
-        else:
+        if np.all(indices==None):
             A = self.A
+        elif self.left:
+            A = self.A[indices, :]
+        else:
+            A = self.A[:, indices]
 
         m, n = A.shape
 
@@ -189,7 +187,7 @@ class VectorSpaceModel():
             q = np.zeros((n, iter))
             v = np.random.rand(n)
         
-        q[:,0] = vv/np.linalg.norm(v)
+        q[:,0] = v/np.linalg.norm(v)
         d = np.array(d).flatten()
         
         # lanczos
@@ -223,11 +221,18 @@ class VectorSpaceModel():
 
         if m < n:
             median = np.median(principal)
-            return np.where(principal <= median)[0], np.where(principal > median)[0]
+            left = np.where(principal <= median)[0]
+            right = np.where(principal > median)[0]
         else:
-            lo_bound = np.quantile(x,.45)
-            up_bound = np.quantile(x,.55)
-            return np.where(principal < up_bound)[0], np.where(principal > lo_bound)[0]
+            lo_bound = np.quantile(principal,.45)
+            up_bound = np.quantile(principal,.55)
+            left = np.where(principal < up_bound)[0]
+            right = np.where(principal > lo_bound)[0]
+        
+        if np.all(indices==None):
+            return left, right
+        else:
+            return indices[left], indices[right]
         
 
 
