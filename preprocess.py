@@ -76,7 +76,6 @@ class VectorSpaceModel():
 
         return alpha, beta, q, a
 
-    
     def response(self, q, query, indices=None):
         if np.all(indices==None):
             A = self.A
@@ -150,7 +149,6 @@ class VectorSpaceModel():
             return A.T.dot(s)
         else:
             return s
-
 
     def implicit_qr_algorithm(self, alpha, beta, eigs=None, tolerance=1e-10):
         n = len(alpha)
@@ -330,4 +328,253 @@ class VectorSpaceModel():
                 data[f'{k}'] = data_k
 
         with open(f'Output\lanczos_dc_{dc}.json', 'w') as f:
+            json.dump(data, f)
+
+    def sequential_lanczos(self, queries):
+        data = {}
+        for k in range(20, 301, 20):
+            data_k = {}
+            start_process = time.time()
+            alpha, beta, q, norms = self.preprocess(k)
+            end_process = time.time()
+            data_k['process'] = end_process - start_process
+
+            num_of_query = queries.shape[1]
+            start_respone = time.time()
+            for q_ind in range(num_of_query):
+                scores = self.response(q, queries[:,q_ind])
+                scores = scores/np.sqrt(norms)           
+                data_k[f'q{q_ind+1}'] = scores.tolist()
+            end_respone = time.time()
+            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+            data[f'{k}'] = data_k
+        data[f'{k}'] = data_k
+        with open(f'Output\lanczos_dc_1.json', 'w') as f:
+            json.dump(data, f)
+
+    def preprocess_lsi(self, k, indices=None):
+        alpha, beta, q, norms = self.preprocess(k+1, indices=indices)
+        eig_values, eig_vectors = self.implicit_qr_algorithm(alpha=alpha, beta=beta)
+        eig_vectors = q.dot(eig_vectors)
+        return eig_values[:-1], eig_vectors[:,:-1]
+
+    def sequential_lsi(self, queries):
+        data = {}
+        for k in range(20, 301, 20):
+            data_k = {}
+            start_process = time.time()
+            eig_values, eig_vectors = self.preprocess_lsi(k)
+            end_process = time.time()
+            data_k['process'] = end_process - start_process
+
+            num_of_query = queries.shape[1]
+            start_respone = time.time()
+            for q_ind in range(num_of_query):
+                if self.left:
+                    scores = eig_vectors.T @ queries[:,q_ind]
+                    scores = eig_vectors @ scores
+                    scores = self.A.T @ scores
+                    norms = np.linalg.norm(eig_vectors.T @ self.A, axis=0)
+                    scores = scores[:,0] / norms
+                else:
+                    scores = self.A.T @ queries[:,0]
+                    scores = eig_vectors.T @ scores
+                    scores = eig_vectors @ scores 
+                    norms = (eig_vectors * eig_vectors) @ eig_values
+                    scores = scores[:,0] / np.sqrt(norms)
+                          
+                data_k[f'q{q_ind+1}'] = scores.tolist()
+            end_respone = time.time()
+            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+            data[f'{k}'] = data_k
+        data[f'{k}'] = data_k
+        with open(f'Output\lsi_dc_1.json', 'w') as f:
+            json.dump(data, f)
+
+    def sequential_lsi_scipy(self, queries):
+        data = {}
+        for k in range(20, 301, 20):
+            data_k = {}
+            start_process = time.time()
+            u, s, vt = svds(self.A, k)
+            end_process = time.time()
+            data_k['process'] = end_process - start_process
+
+            num_of_query = queries.shape[1]
+            start_respone = time.time()
+            for q_ind in range(num_of_query):
+                scores = u.T @ queries[:,q_ind]
+                scores = s * scores
+                scores = vt.T @ scores
+                norms = (vt.T * vt.T) @ (s * s)
+                scores = scores[:,0] / np.sqrt(norms)
+                          
+                data_k[f'q{q_ind+1}'] = scores.tolist()
+            end_respone = time.time()
+            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+            data[f'{k}'] = data_k
+        data[f'{k}'] = data_k
+        with open(f'Output\sci_dc_1.json', 'w') as f:
+            json.dump(data, f)
+
+    def lsi_respone(self, args):
+        eig_values, eig_vectors, query, indices = args
+        if np.all(indices==None):
+            A = self.A
+        elif self.left:
+            A = self.A[indices, :]
+            query = query[indices]
+        else:
+            A = self.A[:, indices]
+        
+        if self.left:
+            scores = eig_vectors.T @ query
+            scores = eig_vectors @ scores
+            scores = A.T @ scores
+            norms = np.linalg.norm(eig_vectors.T @ A, axis=0)
+            return scores[:,0], norms * norms
+        else:
+            scores = A.T @ query
+            scores = eig_vectors.T @ scores
+            scores = eig_vectors @ scores 
+            norms = (eig_vectors * eig_vectors) @ eig_values
+            return scores[:,0], norms 
+        
+    def parallel_lsi(self, queries, dc=2):
+        parts = self.split_data(dc=dc)
+        data = {}
+        with ipp.Cluster(n=dc) as rc:
+            # get a view on the cluster
+            view = rc.load_balanced_view()
+            for k in range(20, 301, 20):
+                data_k = {}
+                # submit the tasks
+                start_process = time.time()
+                asyncresult = view.map_async(lambda indices: self.preprocess_lsi(k, indices), parts)
+                # wait interactively for results
+                asyncresult.wait_interactive()
+                
+                # retrieve actual results
+                values = []
+                vectors = []
+                if self.left:
+                    norms = np.zeros(self.n)
+                else:
+                    norms = []
+                for i, (eig_values, eig_vectors) in enumerate(asyncresult.get()):
+                    values.append(eig_values)
+                    vectors.append(eig_vectors)
+
+                end_process = time.time()
+                data_k['process'] = end_process - start_process
+                
+                num_of_query = queries.shape[1]
+                start_respone = time.time()
+                for q_ind in range(num_of_query):
+                    respone_args = [(values[i], vectors[i], queries[:,q_ind], parts[i]) for i in range(dc)]
+                    asyncresult = view.map_async(self.lsi_respone, respone_args)
+                    asyncresult.wait_interactive()
+
+                    if self.left:
+                        scores = np.zeros(self.n)
+                        norms = np.zeros(self.n)
+                        for cos, norm in asyncresult.get():
+                            scores = scores + cos
+                            norms = norms + norm
+                        scores = scores/np.sqrt(norms)
+                    else:
+                        scores = np.full(self.n, -1.0)
+                        for i, (cos, norm) in enumerate(asyncresult.get()):
+                            cos = cos / np.sqrt(norm)
+                            for ind , j in enumerate(parts[i]):
+                                if scores[j] < cos[ind]:
+                                    scores[j] = cos[ind]
+                                    
+                    data_k[f'q{q_ind+1}'] = scores.tolist()
+                end_respone = time.time()
+                data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                data[f'{k}'] = data_k
+
+        with open(f'Output\lsi_dc_{dc}.json', 'w') as f:
+            json.dump(data, f)
+    
+    def sci_preprocess(self, k, indices=None):
+        if np.all(indices==None):
+            A = self.A
+        elif self.left:
+            A = self.A[indices, :]
+        else:
+            A = self.A[:, indices]
+        return svds(A, k=k)
+
+    def sci_respone(self, args):
+        u, s, vt, query, indices = args
+        
+        if self.left:
+            query = query[indices]
+        
+        scores = u.T @ query
+        scores = s * scores
+        scores = vt.T @ scores
+        norms = (vt.T * vt.T) @ (s * s)
+        return scores[:,0], norms
+
+    def parallel_sci(self, queries, dc=2):
+        parts = self.split_data(dc=dc)
+        data = {}
+        with ipp.Cluster(n=dc) as rc:
+            # get a view on the cluster
+            view = rc.load_balanced_view()
+            for k in range(20, 301, 20):
+                data_k = {}
+                # submit the tasks
+                start_process = time.time()
+                asyncresult = view.map_async(lambda indices: self.sci_preprocess(k, indices), parts)
+                # wait interactively for results
+                asyncresult.wait_interactive()
+                
+                # retrieve actual results
+                us = []
+                ss = []
+                vts = []
+                if self.left:
+                    norms = np.zeros(self.n)
+                else:
+                    norms = []
+                for i, (u, s, vt) in enumerate(asyncresult.get()):
+                    us.append(u)
+                    ss.append(s)
+                    vts.append(vt)
+
+                end_process = time.time()
+                data_k['process'] = end_process - start_process
+                
+                num_of_query = queries.shape[1]
+                start_respone = time.time()
+                for q_ind in range(num_of_query):
+                    respone_args = [(us[i], ss[i],vts[i], queries[:,q_ind], parts[i]) for i in range(dc)]
+                    asyncresult = view.map_async(self.sci_respone, respone_args)
+                    asyncresult.wait_interactive()
+
+                    if self.left:
+                        scores = np.zeros(self.n)
+                        norms = np.zeros(self.n)
+                        for cos, norm in asyncresult.get():
+                            scores = scores + cos
+                            norms = norms + norm
+                        scores = scores/np.sqrt(norms)
+                    else:
+                        scores = np.full(self.n, -1.0)
+                        for i, (cos, norm) in enumerate(asyncresult.get()):
+                            cos = cos / np.sqrt(norm)
+                            for ind , j in enumerate(parts[i]):
+                                if scores[j] < cos[ind]:
+                                    scores[j] = cos[ind]
+                                    
+                    data_k[f'q{q_ind+1}'] = scores.tolist()
+                end_respone = time.time()
+                data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                data[f'{k}'] = data_k
+
+        with open(f'Output\sci_dc_{dc}.json', 'w') as f:
             json.dump(data, f)
