@@ -513,11 +513,11 @@ class VectorSpaceModel():
         if self.left:
             query = query[indices]
         
-        scores = u.T @ query
+        scores = (u.T @ query)[:,0]
         scores = s * scores
         scores = vt.T @ scores
         norms = (vt.T * vt.T) @ (s * s)
-        return scores[:,0], norms
+        return scores[::-1], norms[::-1]
 
     def parallel_sci(self, queries, dc=2):
         parts = self.split_data(dc=dc)
@@ -578,3 +578,76 @@ class VectorSpaceModel():
 
         with open(f'Output\sci_dc_{dc}.json', 'w') as f:
             json.dump(data, f)
+    
+    def CompareToAb(self, query, left = False, reortho=True):
+        logs = {}
+        k = 100
+        A = self.A
+        m, n = A.shape
+        ATb = A.T @ query
+        if left:
+            v = np.random.rand(m)
+            q = np.zeros((m, k))
+            s_hat = query
+        else:
+            v = np.random.rand(n)
+            q = np.zeros((n, k))
+            s_hat = ATb
+        epsilon = np.sqrt(np.finfo(np.float64).eps)
+        beta = 0
+        alpha = 0
+        q[:,0] = v/np.linalg.norm(v)
+        u, sigma, vt = svds(A, 5)
+        s = np.zeros(n)
+        if left:
+            s = np.zeros(m)
+        for i in range(k-1):
+            q_dot_query = q[:,i] @ s_hat
+            s = s + q_dot_query * q[:,i]
+            if left:
+                x = A.T @  s
+                logs[i] = (vt.T[:,4] @ ATb)[0] - (x @ vt.T[:,4]), (vt.T[:,3] @ ATb)[0] - (x @ vt.T[:,3]), (vt.T[:,2] @ ATb)[0] - (x @ vt.T[:,2])
+                q_hat = A.T.dot(q[:,i])
+                w = A.dot(q_hat) - beta * q[:,i-1]
+            else:
+                logs[i] = (vt.T[:,4] @ ATb)[0] - (s @ vt.T[:,4]), (vt.T[:,3] @ ATb)[0] - (s @ vt.T[:,3]), (vt.T[:,2] @ ATb)[0] - (s @ vt.T[:,2])
+                q_hat = A.dot(q[:,i])
+                w = A.T.dot(q_hat) - beta * q[:,i-1]
+
+            alpha = w.dot(q[:,i])
+            w = w - alpha * q[:,i]
+            
+            # start partial reorthonization
+            if reortho:
+                bound = np.linalg.norm(w) * epsilon
+                for j in range(i):
+                    w_dotq = w @ q[:,j]
+                    if abs(w_dotq) > bound:
+                        # reortho[(i,j)] = w_dotq
+                        w = w - w_dotq * q[:,j]
+            # end partial reorthonization
+
+            beta = np.linalg.norm(w)
+            if beta == 0:
+                break
+            q[:,i+1] = w / beta
+        with open(f'Output\convergenttoAb.json', 'w') as f:
+            json.dump(logs, f)
+
+    def CompareToAk(self, query, k):
+        alpha, beta, q, a = self.preprocess(k)
+        lanc = self.response(q, query)
+
+        u, sigma, vt = svds(self.A, k=k)
+        u = u[:, ::-1]
+        sigma = sigma[::-1]
+        v = vt.T[:, ::-1]
+        scores = (u.T @ query)[:,0]
+        scores = sigma * scores
+        scores = v @ scores
+        log = {}
+        for i in range(k):
+            log[i] = v[:,i] @ (lanc - scores)
+        
+        with open(f'Output\comparetoAk.json', 'w') as f:
+            json.dump(log, f)
