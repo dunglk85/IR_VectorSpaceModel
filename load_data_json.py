@@ -3,7 +3,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 class LoadDataset():
-    def __init__(self, corpus_file, queries_file, relevance_file):
+    def __init__(self, corpus_file, queries_file, relevance_file, name):
         self.corpus = corpus_file
         self.query_file = queries_file
         self.relevance_file = relevance_file
@@ -12,7 +12,8 @@ class LoadDataset():
         self.tdidf = TfidfVectorizer(stop_words='english', max_df=0.5)
         self._load_docs()
         self._load_queries()
-        self.relevances = self._load_relevance()
+        self.relevance = self._load_relevance()
+        self.name = name
         
     def _load_docs(self):
         """
@@ -55,7 +56,7 @@ class LoadDataset():
                 r = row.split(" ")
                 qid = int(r[0])
                 rel[qid] = rel.get(qid, []) + [int(r[2])-1]
-        self.relevance = rel
+        return rel
 
         
     

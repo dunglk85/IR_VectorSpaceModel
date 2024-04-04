@@ -10,7 +10,7 @@ from ipyparallel import Client
 import json
 
 class VectorSpaceModel():
-    def __init__(self, docs):
+    def __init__(self, docs, name):
         """
         The class is initialized with the documents stored as a dictionary, 
         with docIDs as keys and the list of terms as values.
@@ -19,6 +19,7 @@ class VectorSpaceModel():
         m, n = docs.shape
         self.left = m < n
         self.n = n
+        self.name = name
 
     def preprocess(self, k, indices = None):
         # reortho = {}
@@ -302,8 +303,9 @@ class VectorSpaceModel():
                 data_k['process'] = end_process - start_process
                 
                 num_of_query = queries.shape[1]
-                start_respone = time.time()
+                respone_time = 0
                 for q_ind in range(num_of_query):
+                    start_respone = time.time()
                     respone_args = [(lanczos[i], queries[:,q_ind], parts[i]) for i in range(dc)]
                     asyncresult = view.map_async(self.respone_wrapper, respone_args)
                     asyncresult.wait_interactive()
@@ -321,13 +323,14 @@ class VectorSpaceModel():
                             for ind , j in enumerate(parts[i]):
                                 if scores[j] < cos[ind]:
                                     scores[j] = cos[ind]
-                                    
-                    data_k[f'q{q_ind+1}'] = scores.tolist()
-                end_respone = time.time()
-                data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                    end_respone = time.time()
+                    respone_time = respone_time + end_respone - start_respone
+                    data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
+                
+                data_k['av_respone'] = respone_time / num_of_query
                 data[f'{k}'] = data_k
 
-        with open(f'Output\lanczos_dc_{dc}.json', 'w') as f:
+        with open(f'Output\{self.name}\lanczos_dc_{dc}.json', 'w') as f:
             json.dump(data, f)
 
     def sequential_lanczos(self, queries):
@@ -344,12 +347,12 @@ class VectorSpaceModel():
             for q_ind in range(num_of_query):
                 scores = self.response(q, queries[:,q_ind])
                 scores = scores/np.sqrt(norms)           
-                data_k[f'q{q_ind+1}'] = scores.tolist()
+                data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
             end_respone = time.time()
             data_k['av_respone'] = (end_respone - start_respone) / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
-        with open(f'Output\lanczos_dc_1.json', 'w') as f:
+        with open(f'Output\{self.name}\lanczos_dc_1.json', 'w') as f:
             json.dump(data, f)
 
     def preprocess_lsi(self, k, indices=None):
@@ -383,12 +386,12 @@ class VectorSpaceModel():
                     norms = (eig_vectors * eig_vectors) @ eig_values
                     scores = scores[:,0] / np.sqrt(norms)
                           
-                data_k[f'q{q_ind+1}'] = scores.tolist()
+                data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
             end_respone = time.time()
             data_k['av_respone'] = (end_respone - start_respone) / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
-        with open(f'Output\lsi_dc_1.json', 'w') as f:
+        with open(f'Output\{self.name}\lsi_dc_1.json', 'w') as f:
             json.dump(data, f)
 
     def sequential_lsi_scipy(self, queries):
@@ -409,12 +412,12 @@ class VectorSpaceModel():
                 norms = (vt.T * vt.T) @ (s * s)
                 scores = scores[:,0] / np.sqrt(norms)
                           
-                data_k[f'q{q_ind+1}'] = scores.tolist()
+                data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
             end_respone = time.time()
             data_k['av_respone'] = (end_respone - start_respone) / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
-        with open(f'Output\sci_dc_1.json', 'w') as f:
+        with open(f'Output\{self.name}\sci_dc_1.json', 'w') as f:
             json.dump(data, f)
 
     def lsi_respone(self, args):
@@ -490,12 +493,12 @@ class VectorSpaceModel():
                                 if scores[j] < cos[ind]:
                                     scores[j] = cos[ind]
                                     
-                    data_k[f'q{q_ind+1}'] = scores.tolist()
+                    data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
                 end_respone = time.time()
                 data_k['av_respone'] = (end_respone - start_respone) / num_of_query
                 data[f'{k}'] = data_k
 
-        with open(f'Output\lsi_dc_{dc}.json', 'w') as f:
+        with open(f'Output\{self.name}\lsi_dc_{dc}.json', 'w') as f:
             json.dump(data, f)
     
     def sci_preprocess(self, k, indices=None):
@@ -571,12 +574,12 @@ class VectorSpaceModel():
                                 if scores[j] < cos[ind]:
                                     scores[j] = cos[ind]
                                     
-                    data_k[f'q{q_ind+1}'] = scores.tolist()
+                    data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
                 end_respone = time.time()
                 data_k['av_respone'] = (end_respone - start_respone) / num_of_query
                 data[f'{k}'] = data_k
 
-        with open(f'Output\sci_dc_{dc}.json', 'w') as f:
+        with open(f'Output\{self.name}\sci_dc_{dc}.json', 'w') as f:
             json.dump(data, f)
     
     def CompareToAb(self, query, left = False, reortho=True):
@@ -623,7 +626,6 @@ class VectorSpaceModel():
                 for j in range(i):
                     w_dotq = w @ q[:,j]
                     if abs(w_dotq) > bound:
-                        # reortho[(i,j)] = w_dotq
                         w = w - w_dotq * q[:,j]
             # end partial reorthonization
 
@@ -631,10 +633,10 @@ class VectorSpaceModel():
             if beta == 0:
                 break
             q[:,i+1] = w / beta
-        with open(f'Output\convergenttoAb.json', 'w') as f:
+        with open(f'Output\{self.name}\CompareToAb{"_reorthor" if reortho else ""}_{"left" if left else "right"}.json', 'w') as f:
             json.dump(logs, f)
 
-    def CompareToAk(self, query, k):
+    def CompareToAk(self, query, k):    
         alpha, beta, q, a = self.preprocess(k)
         lanc = self.response(q, query)
 
@@ -649,5 +651,56 @@ class VectorSpaceModel():
         for i in range(k):
             log[i] = v[:,i] @ (lanc - scores)
         
-        with open(f'Output\comparetoAk.json', 'w') as f:
+        with open(f'Output\{self.name}\CompareToAk{"_reorthor" if reortho else ""}_{"left" if left else "right"}.json', 'w') as f:
             json.dump(log, f)
+
+    def precision_recall(self, relevance, retrieve):
+        precision = {}
+        recall = {}
+        num_of_query = len(relevance)
+        exact_true = 0
+        full = {}
+        for i in range(1, 200, 1):
+            true_positive = 0
+            exact_true = 0
+            count = 0
+            for j in range(num_of_query):
+                _true_positive = len(set(relevance[j+1]).intersection(set(retrieve[f'q{j+1}'][:i])))
+                _exact_true = len(relevance[j+1])
+                if _true_positive < _exact_true:
+                    count += 1
+                    true_positive += _true_positive
+                    exact_true += _exact_true
+                elif _true_positive == _exact_true and j not in full:
+                    full[j] = True
+                    count += 1
+                    true_positive += _true_positive
+                    exact_true += _exact_true
+
+            precision[i] = true_positive/(count * i)
+            recall[i] = true_positive/exact_true
+
+        return precision, recall
+
+    def load_retrieval(self, path, k):
+        with open(path, "r") as f:
+           data = json.load(f)
+           return data[f'{k}']
+    
+    def individual_precision(self, relevance, retrieve, qid):
+        exact_true = len(relevance[qid])
+        result = 0.0
+        for i in range(exact_true):
+            true_positive = len(set(relevance[qid]).intersection(set(retrieve[f'q{qid}'][:i+1])))
+            result += true_positive/(i+1)
+        return result/exact_true
+    
+    def mean_precision(self, path, relevance):
+        num_of_query = len(relevance)
+        result = 0.0
+        for i in range(num_of_query):
+            result += self.individual_precision(relevance, retrieve, i+1)
+        return result/num_of_query
+    
+    
+        
