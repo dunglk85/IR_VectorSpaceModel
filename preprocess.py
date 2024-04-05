@@ -279,7 +279,7 @@ class VectorSpaceModel():
         with ipp.Cluster(n=dc) as rc:
             # get a view on the cluster
             view = rc.load_balanced_view()
-            for k in range(20, 301, 20):
+            for k in range(50, 801, 50):
                 data_k = {}
                 # submit the tasks
                 start_process = time.time()
@@ -335,7 +335,7 @@ class VectorSpaceModel():
 
     def sequential_lanczos(self, queries):
         data = {}
-        for k in range(20, 301, 20):
+        for k in range(50, 801, 50):
             data_k = {}
             start_process = time.time()
             alpha, beta, q, norms = self.preprocess(k)
@@ -343,13 +343,15 @@ class VectorSpaceModel():
             data_k['process'] = end_process - start_process
 
             num_of_query = queries.shape[1]
-            start_respone = time.time()
+            respone_time = 0.0
             for q_ind in range(num_of_query):
+                start_respone = time.time()
                 scores = self.response(q, queries[:,q_ind])
                 scores = scores/np.sqrt(norms)           
                 data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
-            end_respone = time.time()
-            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                end_respone = time.time()
+                respone_time = respone_time + end_respone - start_respone
+            data_k['av_respone'] = respone_time / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
         with open(f'Output\{self.name}\lanczos_dc_1.json', 'w') as f:
@@ -363,7 +365,7 @@ class VectorSpaceModel():
 
     def sequential_lsi(self, queries):
         data = {}
-        for k in range(20, 301, 20):
+        for k in range(50, 801, 50):
             data_k = {}
             start_process = time.time()
             eig_values, eig_vectors = self.preprocess_lsi(k)
@@ -371,8 +373,10 @@ class VectorSpaceModel():
             data_k['process'] = end_process - start_process
 
             num_of_query = queries.shape[1]
-            start_respone = time.time()
+            
+            respone_time = 0.0
             for q_ind in range(num_of_query):
+                start_respone = time.time()
                 if self.left:
                     scores = eig_vectors.T @ queries[:,q_ind]
                     scores = eig_vectors @ scores
@@ -385,10 +389,11 @@ class VectorSpaceModel():
                     scores = eig_vectors @ scores 
                     norms = (eig_vectors * eig_vectors) @ eig_values
                     scores = scores[:,0] / np.sqrt(norms)
-                          
+                end_respone = time.time()
+                respone_time = respone_time + end_respone - start_respone        
                 data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
-            end_respone = time.time()
-            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+            
+            data_k['av_respone'] = respone_time / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
         with open(f'Output\{self.name}\lsi_dc_1.json', 'w') as f:
@@ -396,7 +401,7 @@ class VectorSpaceModel():
 
     def sequential_lsi_scipy(self, queries):
         data = {}
-        for k in range(20, 301, 20):
+        for k in range(50, 801, 50):
             data_k = {}
             start_process = time.time()
             u, s, vt = svds(self.A, k)
@@ -404,17 +409,20 @@ class VectorSpaceModel():
             data_k['process'] = end_process - start_process
 
             num_of_query = queries.shape[1]
-            start_respone = time.time()
+            
+            respone_time = 0.0
             for q_ind in range(num_of_query):
+                start_respone = time.time()
                 scores = u.T @ queries[:,q_ind]
                 scores = s * scores
                 scores = vt.T @ scores
                 norms = (vt.T * vt.T) @ (s * s)
                 scores = scores[:,0] / np.sqrt(norms)
-                          
+                end_respone = time.time()
+                respone_time = respone_time + end_respone - start_respone         
                 data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
-            end_respone = time.time()
-            data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+            
+            data_k['av_respone'] = respone_time / num_of_query
             data[f'{k}'] = data_k
         data[f'{k}'] = data_k
         with open(f'Output\{self.name}\sci_dc_1.json', 'w') as f:
@@ -449,7 +457,7 @@ class VectorSpaceModel():
         with ipp.Cluster(n=dc) as rc:
             # get a view on the cluster
             view = rc.load_balanced_view()
-            for k in range(20, 301, 20):
+            for k in range(50, 801, 50):
                 data_k = {}
                 # submit the tasks
                 start_process = time.time()
@@ -472,8 +480,10 @@ class VectorSpaceModel():
                 data_k['process'] = end_process - start_process
                 
                 num_of_query = queries.shape[1]
-                start_respone = time.time()
+                
+                respone_time = 0.0
                 for q_ind in range(num_of_query):
+                    start_respone = time.time()
                     respone_args = [(values[i], vectors[i], queries[:,q_ind], parts[i]) for i in range(dc)]
                     asyncresult = view.map_async(self.lsi_respone, respone_args)
                     asyncresult.wait_interactive()
@@ -492,10 +502,11 @@ class VectorSpaceModel():
                             for ind , j in enumerate(parts[i]):
                                 if scores[j] < cos[ind]:
                                     scores[j] = cos[ind]
-                                    
+                    end_respone = time.time()
+                    respone_time = respone_time + end_respone - start_respone              
                     data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
-                end_respone = time.time()
-                data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                
+                data_k['av_respone'] = respone_time / num_of_query
                 data[f'{k}'] = data_k
 
         with open(f'Output\{self.name}\lsi_dc_{dc}.json', 'w') as f:
@@ -528,7 +539,7 @@ class VectorSpaceModel():
         with ipp.Cluster(n=dc) as rc:
             # get a view on the cluster
             view = rc.load_balanced_view()
-            for k in range(20, 301, 20):
+            for k in range(50, 801, 50):
                 data_k = {}
                 # submit the tasks
                 start_process = time.time()
@@ -553,8 +564,9 @@ class VectorSpaceModel():
                 data_k['process'] = end_process - start_process
                 
                 num_of_query = queries.shape[1]
-                start_respone = time.time()
+                respone_time = 0.0
                 for q_ind in range(num_of_query):
+                    start_respone = time.time()
                     respone_args = [(us[i], ss[i],vts[i], queries[:,q_ind], parts[i]) for i in range(dc)]
                     asyncresult = view.map_async(self.sci_respone, respone_args)
                     asyncresult.wait_interactive()
@@ -573,10 +585,11 @@ class VectorSpaceModel():
                             for ind , j in enumerate(parts[i]):
                                 if scores[j] < cos[ind]:
                                     scores[j] = cos[ind]
-                                    
+                    end_respone = time.time()
+                    respone_time = respone_time + end_respone - start_respone                
                     data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
-                end_respone = time.time()
-                data_k['av_respone'] = (end_respone - start_respone) / num_of_query
+                
+                data_k['av_respone'] = respone_time / num_of_query
                 data[f'{k}'] = data_k
 
         with open(f'Output\{self.name}\sci_dc_{dc}.json', 'w') as f:
