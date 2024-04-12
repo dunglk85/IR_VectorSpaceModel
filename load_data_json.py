@@ -1,5 +1,9 @@
 import json
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer, CountVectorizer
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 
 
 class LoadDataset():
@@ -9,12 +13,19 @@ class LoadDataset():
         self.relevance_file = relevance_file
         self.doc_matrix = None
         self.query_vectors = None
-        self.tdidf = TfidfVectorizer(stop_words='english', max_df=0.5)
         self._load_docs()
         self._load_queries()
         self.relevance = self._load_relevance()
         self.name = name
         
+
+    def tokenize_and_preprocess(self, doc):
+        stop_words = set(stopwords.words('english'))
+        lemmatizer = WordNetLemmatizer()
+        tokens = word_tokenize(doc.lower())
+        tokens = [lemmatizer.lemmatize(token) for token in tokens if token.isalnum() and token not in stop_words]
+        return tokens
+
     def _load_docs(self):
         """
         Returns a list of lists where each sub-list contains all the terms 
@@ -25,7 +36,10 @@ class LoadDataset():
         with open(self.corpus, "r") as f:
             data = json.load(f)
             self.docs = [x['TEXT'] for x in data]
-            self.doc_matrix = self.tdidf.fit_transform(self.docs)
+            self.vectorizer = CountVectorizer(tokenizer=self.tokenize_and_preprocess)
+            X = self.vectorizer.fit_transform(self.docs)
+            self.tfidf_transformer = TfidfTransformer()
+            self.doc_matrix = self.tfidf_transformer.fit_transform(X)
             self.doc_matrix = self.doc_matrix.transpose()
         
 
@@ -40,7 +54,8 @@ class LoadDataset():
            self.queries = [x['QUERY'] for x in data['QUERIES']]
         if self.doc_matrix == None:
             self._load_docs()
-        self.query_vectors = self.tdidf.transform(self.queries)
+        X = self.vectorizer.transform(self.queries)
+        self.query_vectors = self.tfidf_transformer.transform(X)
         self.query_vectors = self.query_vectors.transpose()
 
 

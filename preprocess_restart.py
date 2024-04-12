@@ -9,7 +9,7 @@ import pandas as pd
 from ipyparallel import Client
 import json
 
-class VectorSpaceModel():
+class VectorSpaceModel2():
     def __init__(self, docs, name):
         """
         The class is initialized with the documents stored as a dictionary, 
@@ -21,7 +21,7 @@ class VectorSpaceModel():
         self.n = n
         self.name = name
 
-    def preprocess(self, k, indices = None):
+    def preprocess(self, q, alpha, beta, k, indices = None):
         # reortho = {}
         if np.all(indices==None):
             A = self.A
@@ -54,12 +54,7 @@ class VectorSpaceModel():
                 w = A.T.dot(q_hat) - beta[i] * q[:,i-1]
                 alpha[i] = w.dot(q[:,i])
                 a = a + alpha[i]*np.square(q[:,i]) + 2*beta[i]*np.multiply(q[:,i], q[:,i-1])
-            
             w = w - alpha[i] * q[:,i]
-            ## start full reorthonization
-            # for j in range(i):
-            #     w_dotq = w @ q[j]
-            #     w = w - w_dotq * q[j]
             
             # start partial reorthonization
             bound = np.linalg.norm(w) * epsilon
@@ -98,53 +93,6 @@ class VectorSpaceModel():
         for i in range(k):
             q_dot_query = q[:,i] @ s_hat
             s = s + q_dot_query * q[:,i]
-
-        if self.left:
-            return A.T.dot(s)
-        else:
-            return s
-    
-    def tri_response(self, alpha, beta, q1, query, indices=None):
-        if np.all(indices==None):
-            A = self.A
-        elif self.left:
-            A = self.A[indices, :]
-        else:
-            A = self.A[:, indices]
-        k = len(alpha)
-        len = len(indices)
-        s_hat = np.zeros(len)
-
-        if self.left:
-            s_hat = query
-        else:
-            s_hat = A.T.dot(query)
-
-        s = np.zeros(len)
-
-        q = np.zeros((self.len, self.k))
-        q[:,0] = self.q1
-
-        # range k-1 if tridiag
-        for i in range(k-1):
-            q_dot_query = q[:,i] @ s_hat
-            s = s + q_dot_query * q[:,i]
-
-            if self.left:
-                Aq = self.A.T.dot(q[:,i])
-                w = self.A.dot(Aq)
-            else:
-                Aq = self.A.dot(q[:,i])
-                w = self.A.T.dot(Aq)
-
-            w = w - self.beta[i] * q[:,i-1] - self.alpha[i] * q[:,i]
-            for j in range(i):
-                if (i, j) in self.reortho:
-                    w = w - self.reortho[(i,j)] * q[:,j]
-            q[:,i+1] = w / self.beta[i+1]
-                
-        q_dot_query = q[:,k-1] @ s_hat
-        s = s + q_dot_query * q[:,k-1]
 
         if self.left:
             return A.T.dot(s)
