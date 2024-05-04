@@ -33,10 +33,10 @@ class VectorSpaceModel():
         m, n = A.shape
         if m < n:
             v = np.random.rand(m)
-            q = np.zeros((m, k))
+            q = np.zeros((m, k+1))
         else:
             v = np.random.rand(n)
-            q = np.zeros((n, k))
+            q = np.zeros((n, k+1))
         epsilon = np.sqrt(np.finfo(np.float64).eps)
         a = np.zeros(n)
         beta = np.zeros(k)
@@ -103,66 +103,25 @@ class VectorSpaceModel():
             return A.T.dot(s)
         else:
             return s
-    
-    def tri_response(self, alpha, beta, q1, query, indices=None):
-        if np.all(indices==None):
-            A = self.A
-        elif self.left:
-            A = self.A[indices, :]
-        else:
-            A = self.A[:, indices]
-        k = len(alpha)
-        len = len(indices)
-        s_hat = np.zeros(len)
 
-        if self.left:
-            s_hat = query
-        else:
-            s_hat = A.T.dot(query)
-
-        s = np.zeros(len)
-
-        q = np.zeros((self.len, self.k))
-        q[:,0] = self.q1
-
-        # range k-1 if tridiag
-        for i in range(k-1):
-            q_dot_query = q[:,i] @ s_hat
-            s = s + q_dot_query * q[:,i]
-
-            if self.left:
-                Aq = self.A.T.dot(q[:,i])
-                w = self.A.dot(Aq)
-            else:
-                Aq = self.A.dot(q[:,i])
-                w = self.A.T.dot(Aq)
-
-            w = w - self.beta[i] * q[:,i-1] - self.alpha[i] * q[:,i]
-            for j in range(i):
-                if (i, j) in self.reortho:
-                    w = w - self.reortho[(i,j)] * q[:,j]
-            q[:,i+1] = w / self.beta[i+1]
-                
-        q_dot_query = q[:,k-1] @ s_hat
-        s = s + q_dot_query * q[:,k-1]
-
-        if self.left:
-            return A.T.dot(s)
-        else:
-            return s
-
-    def implicit_qr_algorithm(self, alpha, beta, eigs=None, tolerance=1e-10):
+    def implicit_qr_algorithm(self, alpha1, beta1, mu=None, eigs=None, tolerance=1e-10):
+        alpha = alpha1.copy()
+        beta = beta1.copy()
         n = len(alpha)
         if n < 2:
             return alpha, eigs
+        
+
+
         if np.all(eigs == None):
             eigs = np.eye(n)
 
         for _ in range(100):
             # Perform implicit QR step
-            d = (alpha[n-2] - alpha[n-1])/2
-            sign_d = -1 if d < 0 else 1
-            mu = alpha[n-1] - beta[n-1]*beta[n-1]/(d + sign_d*np.sqrt(d*d + beta[n-1]*beta[n-1]))
+            if mu == None:
+                d = (alpha[n-2] - alpha[n-1])/2
+                sign_d = -1 if d < 0 else 1
+                mu = alpha[n-1] - beta[n-1]*beta[n-1]/(d + sign_d*np.sqrt(d*d + beta[n-1]*beta[n-1]))
             x = alpha[0] - mu
             z = beta[1]
             for i in range(n - 1):
@@ -187,10 +146,10 @@ class VectorSpaceModel():
                 alpha[i+1] = s*s * tem_a_1 + 2*c*s * beta[i+1] + c*c*tem_a_2
                 beta[i+1] = s*c*(tem_a_1 - tem_a_2) + beta[i+1]*(c*c - s*s)
 
-                if abs(beta[i+1]) < tolerance:
-                    alpha_1, eig_1 = self.implicit_qr_algorithm(alpha[:i+1], beta[:i+1],eigs=eigs[:,:i+1])
-                    alpha_2, eig_2 = self.implicit_qr_algorithm(alpha[i+1:], beta[i+1:],eigs=eigs[:,i+1:])
-                    return np.concatenate((alpha_1, alpha_2)), np.concatenate((eig_1, eig_2), axis=1)
+                # if abs(beta[i+1]) < tolerance:
+                #     alpha_1, eig_1 = self.implicit_qr_algorithm(alpha[:i+1], beta[:i+1],eigs=eigs[:,:i+1])
+                #     alpha_2, eig_2 = self.implicit_qr_algorithm(alpha[i+1:], beta[i+1:], mu=mu, eigs=eigs[:,i+1:])
+                #     return np.concatenate((alpha_1, alpha_2)), np.concatenate((eig_1, eig_2), axis=1)
                 
                 x = beta[i+1]
 
@@ -203,7 +162,7 @@ class VectorSpaceModel():
             A = self.A[indices, :]
         else:
             A = self.A[:, indices]
-
+        
         m, n = A.shape
 
         if m < n:
