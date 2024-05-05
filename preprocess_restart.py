@@ -84,12 +84,12 @@ class VectorSpaceModel2():
             s = Q.T @ query
             s = Q @ s
             s = A.T @ s
-            return s
+            return s.squeeze()
         else:
             s = A.T @ query
+            s = Q.T @ s
             s = Q @ s
-            s = Q @ s
-            return s
+            return s.squeeze()
     
     def bisec_PDDP(self, indices=None):
         if np.all(indices==None):
@@ -104,21 +104,22 @@ class VectorSpaceModel2():
         s1 = s[0]
 
         if m < n:
-            u1= u[0,:]
+            u1= u[:,0]
             d = np.sum(A, axis=0)
-            d = A @ d
-            d = d/(s1*s1*math.sqrt(m))
+            d = np.array(d)
+            d = d[:,0]/(s1*s1*math.sqrt(m))
             principal = u1 - d
 
             median = np.median(principal)
             left = np.where(principal <= median)[0]
             right = np.where(principal > median)[0]
         else:
-            v1= vt[0,:]
+            v1= vt.T[:,0]
             d = np.sum(A, axis=1)
+            d = np.array(d)
             d = A.T @ d
-            d = d/(s1*s1*math.sqrt(n))
-            principal = v1.T - d
+            d = d[:,0]/(s1*s1*math.sqrt(n))
+            principal = v1 - d
 
             lo_bound = np.quantile(principal,.45)
             up_bound = np.quantile(principal,.55)
@@ -353,11 +354,11 @@ class VectorSpaceModel2():
         ATb = A.T @ query
         if left:
             v = np.random.rand(m)
-            q = np.zeros((m, k))
+            Q = np.zeros((m, k))
             s_hat = query
         else:
             v = np.random.rand(n)
-            q = np.zeros((n, k))
+            Q = np.zeros((n, k))
             s_hat = ATb
         epsilon = np.sqrt(np.finfo(np.float64).eps)
         beta = 0
@@ -404,17 +405,13 @@ class VectorSpaceModel2():
         lanc = self.response(q, query)
 
         u, sigma, vt = svds(self.A, k=k)
-        u = u[:, ::-1]
-        sigma = sigma[::-1]
-        v = vt.T[:, ::-1]
-        scores = (u.T @ query)[:,0]
-        scores = sigma * scores
-        scores = v @ scores
+        scores = (u.T @ query)
+        scores = sigma * scores[:,0]
+        scores = vt.T @ scores
         log = {}
         for i in range(k):
-            log[i] = v[:,i] @ (lanc - scores)
-        
-        with open(f'Output\{self.name}\CompareToAk{"_reorthor" if reortho else ""}_{"left" if left else "right"}.json', 'w') as f:
+            log[i] = vt[k-i-1,:] @ (lanc - scores)
+        with open(f'Output\{self.name}\CompareToAk.json', 'w') as f:
             json.dump(log, f)
 
     def precision_recall(self, relevance, retrieve):
@@ -458,7 +455,7 @@ class VectorSpaceModel2():
             result += true_positive/(i+1)
         return result/exact_true
     
-    def mean_precision(self, path, relevance):
+    def mean_precision(self, relevance):
         num_of_query = len(relevance)
         result = 0.0
         for i in range(num_of_query):
