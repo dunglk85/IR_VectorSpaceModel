@@ -176,7 +176,7 @@ class VectorSpaceModel2():
         with ipp.Cluster(n=dc) as rc:
             # get a view on the cluster
             view = rc.load_balanced_view()
-            for k in range(50, 801, 50):
+            for k in range(0, 301, 20):
                 data_k = {}
                 # submit the tasks
                 start_process = time.time()
@@ -268,12 +268,12 @@ class VectorSpaceModel2():
                 scores = u.T @ queries[:,q_ind]
                 scores = s * scores[:,0]
                 scores = vt.T @ scores
-                norms = (vt.T * vt.T) @ (s * s)
+                norms = (vt * vt).T @ (s * s)
                 scores = scores/ np.sqrt(norms)
                 end_respone = time.time()
                 respone_time = respone_time + end_respone - start_respone
-                scores = scores[::-1]        
-                data_k[f'q{q_ind+1}'] = (np.argsort(scores)[:200]).tolist()
+                indices = (np.argsort(scores)[::-1][:200]).tolist()      
+                data_k[f'q{q_ind+1}'] = indices
             
             data_k['av_respone'] = respone_time / num_of_query
             data[f'{k}'] = data_k
@@ -338,7 +338,7 @@ class VectorSpaceModel2():
                     end_respone = time.time()
                     respone_time = respone_time + end_respone - start_respone
                     scores = scores[::-1]               
-                    data_k[f'q{q_ind+1}'] = (np.argsort(scores)[:200]).tolist()
+                    data_k[f'q{q_ind+1}'] = (np.argsort(scores)[::-1][:200]).tolist()
                 
                 data_k['av_respone'] = respone_time / num_of_query
                 data[f'{k}'] = data_k
@@ -415,8 +415,8 @@ class VectorSpaceModel2():
             json.dump(log, f)
 
     def precision_recall(self, relevance, retrieve):
-        precision = {}
-        recall = {}
+        precision = []
+        recall = []
         num_of_query = len(relevance)
         exact_true = 0
         full = {}
@@ -437,8 +437,8 @@ class VectorSpaceModel2():
                     true_positive += _true_positive
                     exact_true += _exact_true
 
-            precision[i] = true_positive/(count * i)
-            recall[i] = true_positive/exact_true
+            precision.append(true_positive/(count * i))
+            recall.append(true_positive/exact_true)
 
         return precision, recall
 
@@ -455,7 +455,7 @@ class VectorSpaceModel2():
             result += true_positive/(i+1)
         return result/exact_true
     
-    def mean_precision(self, relevance):
+    def mean_precision(self, relevance, retrieve):
         num_of_query = len(relevance)
         result = 0.0
         for i in range(num_of_query):
