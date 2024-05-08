@@ -256,7 +256,7 @@ class VectorSpaceModel2():
         for k in range(50, 801, 50):
             data_k = {}
             start_process = time.time()
-            u, s, vt = svds(self.A, k)
+            u, s, vt = svds(self.A, k=k)
             end_process = time.time()
             data_k['process'] = end_process - start_process
 
