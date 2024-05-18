@@ -91,7 +91,7 @@ class VectorSpaceModel2():
             s = Q @ s
             return s.squeeze()
     
-    def bisec_PDDP(self, indices=None):
+    def bisec_PDDP(self, indices=None, iter = 4):
         if np.all(indices==None):
             A = self.A
         elif self.left:
@@ -100,27 +100,49 @@ class VectorSpaceModel2():
             A = self.A[:, indices]
         
         m, n = A.shape
-        u, s, vt = svds(A, k=1)
-        s1 = s[0]
 
         if m < n:
-            u1= u[:,0]
-            d = np.sum(A, axis=0)
-            d = np.array(d)
-            d = d[:,0]/(s1*s1*math.sqrt(m))
-            principal = u1 - d
+            d = np.sum(A, axis=0)/m
+            q = np.zeros((m, iter))
+            v = np.random.rand(m)
+        else:
+            d = np.sum(A, axis=1)/n
+            q = np.zeros((n, iter))
+            v = np.random.rand(n)
+        
+        q[:,0] = v/np.linalg.norm(v)
+        d = np.array(d).flatten()
+        
+        # lanczos
+        alpha = np.zeros(iter)
+        beta = np.zeros(iter)
+        
+        for i in range(iter-1):
+            if m < n:
+                q_hat = A.T @ q[:,i] - np.sum(q[:,i]) * d
+                w = A @ q_hat - beta[i] * q[:,i-1] - np.full(m, q_hat @ d)
+            else:
+                q_hat = A @ q[:,i] - np.sum(q[:,i]) * d
+                w = A.T @ q_hat - beta[i] * q[:,i-1] - np.full(n, q_hat @ d)
 
+            alpha[i] = w.dot(q[:,i])
+            w = w - alpha[i] * q[:,i]
+
+            beta[i+1] = np.linalg.norm(w)
+            if beta[i+1] == 0:
+                break
+            q[:,i+1] = w / beta[i+1]
+        # end lanczos
+
+        T = diags([alpha, beta, beta], [0, -1, 1]).toarray()
+        w, v = eigsh(T)
+        principal = q.dot(v[:,0])
+
+        if m < n:
             median = np.median(principal)
             left = np.where(principal <= median)[0]
             right = np.where(principal > median)[0]
         else:
-            v1= vt.T[:,0]
-            d = np.sum(A, axis=1)
-            d = np.array(d)
-            d = A.T @ d
-            d = d[:,0]/(s1*s1*math.sqrt(n))
-            principal = v1 - d
-
             lo_bound = np.quantile(principal,.45)
             up_bound = np.quantile(principal,.55)
             left = np.where(principal < up_bound)[0]
@@ -129,8 +151,7 @@ class VectorSpaceModel2():
         if np.all(indices==None):
             return left, right
         else:
-            return indices[left], indices[right]
-    
+            return indices[left], indices[right]    
     def split_data(self, dc=2):
         left, right = self.bisec_PDDP()
         parts = [left, right]
