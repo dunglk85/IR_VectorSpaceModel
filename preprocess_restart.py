@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, diags
 from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse.linalg import svds, eigsh
 import math
@@ -91,7 +91,7 @@ class VectorSpaceModel2():
             s = Q @ s
             return s.squeeze()
     
-    def bisec_PDDP(self, indices=None, iter = 4):
+    def bisec_PDDP(self, indices=None, iter = 6):
         if np.all(indices==None):
             A = self.A
         elif self.left:
@@ -143,8 +143,8 @@ class VectorSpaceModel2():
             left = np.where(principal <= median)[0]
             right = np.where(principal > median)[0]
         else:
-            lo_bound = np.quantile(principal,.45)
-            up_bound = np.quantile(principal,.55)
+            lo_bound = np.quantile(principal,.35)
+            up_bound = np.quantile(principal,.65)
             left = np.where(principal < up_bound)[0]
             right = np.where(principal > lo_bound)[0]
         

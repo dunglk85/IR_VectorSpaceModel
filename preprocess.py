@@ -192,11 +192,6 @@ class VectorSpaceModel():
             alpha[i] = w.dot(q[:,i])
             w = w - alpha[i] * q[:,i]
 
-            # # start full reorthonization
-            # for j in range(i):
-            #     w_dotq = w @ q[:,j]
-            #     w = w - w_dotq * q[:,j]
-
             beta[i+1] = np.linalg.norm(w)
             if beta[i+1] == 0:
                 break
